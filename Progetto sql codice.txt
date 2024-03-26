@@ -1,0 +1,256 @@
+-- Analisi parametri socio-sanitari
+
+SELECT country, population, fertility_rate, infant_mortality, life_expectancy
+FROM world_data
+WHERE(country, population, fertility_rate, infant_mortality, life_expectancy) IS NOT NULL
+ORDER BY life_expectancy
+
+-- Evidente correlazione inversa tra aspettativa di vita e mortalità infantile. Paesi dove l'aspettativa di vita è inferiore hanno la più alta concetrazione di mortalità infatile e il tasso di fertilità maggiore--
+
+--Valutazione della presenza dei medici x 1000 abitabti nei paesi con più bassa aspettativa di vita-- 
+
+WITH medici AS (
+    SELECT
+        country,
+        physicians_per_thousand
+    FROM
+        world_data
+    WHERE
+        physicians_per_thousand IS NOT NULL
+    ORDER BY
+        physicians_per_thousand DESC
+)
+
+SELECT
+    wd.country,
+    wd.fertility_rate,
+    wd.infant_mortality,
+    wd.life_expectancy,
+    m.physicians_per_thousand AS medici
+FROM
+    world_data wd
+JOIN
+    medici m ON wd.country = m.country
+ORDER BY
+    wd.life_expectancy; 
+
+-- Notiamo anche in questo caso una correlazione tra le variabili aspettativa di vita e presenza di medici, una maggiore presenza di medici è correlata ad una maggiore aspettativa di vita-- 
+
+-- Da tenere presente che l'aspettativa di vita è fortemente influenzata dalla mortalità infatile che, essendo più alta, abbassa inevitabilmente il dato sull'aspettativa di vita che ne tiene conto--
+
+SELECT country, maternal_mortality_ratio, physicians_per_thousand
+FROM world_data
+WHERE ( maternal_mortality_ratio, physicians_per_thousand) IS NOT NULL
+ORDER BY maternal_mortality_ratio DESC
+
+SELECT country, infant_mortality, physicians_per_thousand
+FROM world_data
+WHERE ( infant_mortality, physicians_per_thousand) IS NOT NULL
+ORDER BY infant_mortality DESC
+
+
+-- La presenza di medici aiuta a ridurre anche il tasso di mortalità materna, oltre che quella infantile-- 
+
+--Cos'altro può aiutare ad alzare l'aspettativa di vita e ridurre la mortalità?-- 
+
+-- Prendiamo ad esempio il fattore istruzione-- 
+
+SELECT country, life_expectancy AS aspettativa_di_vita, gross_primary_education_enrollment as
+scuola_primaria, gross_tertiary_education_enrollment as scuola_secondaria
+FROM world_data
+WHERE (life_expectancy,gross_primary_education_enrollment,gross_tertiary_education_enrollment) IS
+NOT NULL
+GROUP BY country
+ORDER BY aspettativa_di_vita
+
+-- Un maggior livello di istruzione secondaria porta ad un lineare aumento dell'aspettativa di vita-- 
+
+-- E' interessante notare che gli stessi paesi dove l'aspettativa di vita è inferiore, vi è anche il tasso di fertilità maggiore. Segue approfondimento:--
+
+SELECT fertility_rate as tasso_di_fertilità, life_expectancy as aspettativa_di_vita
+FROM world_data
+ORDER BY aspettativa_di_vita
+
+-- Come organizzare suddividere i vari tassi di fertilità? -- 
+
+SELECT
+country AS stato,
+fertility_rate AS tasso_di_fertilità,
+CASE
+WHEN fertility_rate BETWEEN 0 AND 1.5 THEN 'Molto basso'
+WHEN fertility_rate BETWEEN 1.6 AND 2 THEN 'Basso'
+WHEN fertility_rate BETWEEN 2.1 AND 2.5 THEN 'Moderato'
+WHEN fertility_rate BETWEEN 2.6 AND 3 THEN 'Alto'
+WHEN fertility_rate > 3 THEN 'Molto alto'
+ELSE 'NULL'
+END AS valutazione_fertilità
+FROM
+world_data
+ORDER BY tasso_di_fertilità;
+-- Riscontrato errore in quanto valori come 2.05,2.06,2.07,2.08, 2.09 risultano null--
+
+
+--Risolto di seguito--
+
+
+SELECT
+country AS stato,
+fertility_rate AS tasso_di_fertilità,
+CASE
+WHEN fertility_rate >= 0 AND fertility_rate < 1.6 THEN 'Molto basso'
+WHEN fertility_rate >= 1.6 AND fertility_rate < 2.1 THEN 'Basso'
+WHEN fertility_rate >= 2.1 AND fertility_rate < 2.6 THEN 'Moderato'
+WHEN fertility_rate >= 2.6 AND fertility_rate < 3.0 THEN 'Alto'
+WHEN fertility_rate >= 3.0 THEN 'Molto alto'
+ELSE 'NULL'
+END AS valutazione_fertilità
+FROM
+world_data
+ORDER BY tasso_di_fertilità
+
+-- A questo punto mi chiedo qual'è la media della mortalità infantile dei 20 paesi più emettitori di CO2?--
+
+WITH PaesiConMassimeEmissioni AS (
+    SELECT
+        country,
+        AVG(CAST(REPLACE(co2_emissions, ',', '') AS DECIMAL(18,2))) AS Media_Emissioni
+    FROM
+        world_data
+    WHERE
+        infant_mortality IS NOT NULL AND co2_emissions IS NOT NULL
+    GROUP BY
+        country
+    ORDER BY
+        Media_Emissioni DESC
+    LIMIT 20
+)
+SELECT
+    AVG(wd.infant_mortality) AS Media_Mortalità_Infantile
+FROM
+    PaesiConMassimeEmissioni pcm
+JOIN
+    world_data wd ON pcm.country = wd.country;
+
+--Risultato: 8.915--
+
+-- E quella dei 20 paesi che emettono meno?--
+
+WITH PaesiConMassimeEmissioni AS (
+    SELECT
+        country,
+        AVG(CAST(REPLACE(co2_emissions, ',', '') AS DECIMAL(18,2))) AS Media_Emissioni
+    FROM
+        world_data
+    WHERE
+        infant_mortality IS NOT NULL AND co2_emissions IS NOT NULL
+    GROUP BY
+        country
+    ORDER BY
+        Media_Emissioni ASC 
+    LIMIT 20
+)
+SELECT
+    AVG(wd.infant_mortality) AS Media_Mortalità_Infantile
+FROM
+    PaesiConMassimeEmissioni pcm
+JOIN
+    world_data wd ON pcm.country = wd.country;
+	
+-- Risultato: 27.005--
+
+--Questo risultato è veramente molto interessante e porta ad una considerazione, un abbassamento della mortalità infantile non può prescindere da un marcato sviluppo economico di un paese e quindi, purtroppo,  ad un suo aumento delle emissioni di CO2--
+
+--A questo punto mi chiedo qual'è stato il GDP del 2018 dei paesi che hanno emesso più co2?--
+--Scelgo
+
+SELECT entity, year, CAST(value_co2_emissions AS decimal(18,2)),gdp_growth
+FROM energy
+WHERE (entity, value_co2_emissions,gdp_growth) IS NOT NULL AND year = '2018'
+ORDER BY value_co2_emissions desc
+LIMIT 20
+
+
+
+
+--Confronto tra i paesi che emettono di più--
+
+SELECT 
+   entity AS stato, 
+   year as anno, 
+   CAST(value_co2_emissions AS decimal(18,2)) AS emissioni_CO2,
+   CAST(gdp_growth AS decimal(18,2)) AS crescita_GDP
+FROM 
+   energy
+WHERE 
+   year != '2008' 
+   AND year != '2009' 
+   AND year !='2019' 
+   AND value_co2_emissions IS NOT NULL
+   AND entity IN ('United States','China','India')
+ORDER BY 
+   CAST(value_co2_emissions AS decimal(18,2)) DESC
+
+--Ho deciso di escludere gli anni 2008,2009 e 2019 a causa dell'intervento delle crisi finaniarie e sanitarie che hanno interessato questi anni e che avrebbero potuto confondere l'interpretazione dei dati-- 
+
+-- Sono incuriosito dai dati cinesi--
+
+SELECT 
+   entity AS stato, 
+   year as anno, 
+   CAST(value_co2_emissions AS decimal(18,2)) AS emissioni_CO2,
+   CAST(gdp_growth AS decimal(18,2)) AS crescita_GDP
+FROM 
+   energy
+WHERE 
+     AND value_co2_emissions IS NOT NULL
+   AND entity IN ('China')
+ORDER BY 
+  year
+
+-- La crescita del GDP cinese ha subito una battuta di arresto durante la crisi finanziaria del 2007-2008 e nonostante abbia mantenuto un livello crescente di emissioni, il valore del gdp non ha smesso di scendere-- 
+
+-- A questo punto mi interessa confrontare con la situazione degli Stati Uniti-- 
+
+SELECT 
+   entity AS stato, 
+   year as anno, 
+   CAST(value_co2_emissions AS decimal(18,2)) AS emissioni_CO2,
+   CAST(gdp_growth AS decimal(18,2)) AS crescita_GDP
+FROM 
+   energy
+WHERE 
+   value_co2_emissions IS NOT NULL
+   AND entity IN ('United States')
+ORDER BY 
+  year
+
+-- Notiamo come le emissioni siano in costante, anche se lieve, calo. Al contrario della Cina, gli USA, successivamente alla crisi del 2008, hanno mantenuto livelli di emissioni decrescenti, nonostante una ripresa del gdp--
+
+
+-- E in italia?--
+--Osservare l'utilizzo di fonti rinnovabili in Italia partendo dall'anno in cui ne abbiamo utilizzate maggiormente. Il 2014!--
+
+SELECT 
+entity AS stato, 
+year AS Anno, 
+CAST(renewables AS decimal) as percentuale_rinnovabili
+FROM 
+energy
+WHERE 
+entity LIKE '%al%' AND entity LIKE 'I%'
+ORDER BY 
+percentuale_rinnovabili DESC
+
+--Considero l'esempio della Germania e il suo andamento per quanto riguarda l'utilizzo delle fonti di energia e le sue variazioni negli anni--
+SELECT
+entity AS Stato,
+year AS Anno,
+electricity_from_nuclear AS Nucleare,
+electricity_from_fossil_fuels AS Fossile,
+electricity_from_renewables AS Rinnovabili,
+value_co2_emissions AS emissioni_co2,
+primary_energy_consumption_per_capita AS consumo_per_capita
+FROM
+energy
+WHERE
+entity IN ('Germany');
